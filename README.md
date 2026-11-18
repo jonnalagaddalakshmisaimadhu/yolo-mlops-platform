@@ -1,12 +1,10 @@
-# YOLO MLOps Platform
+# CV Platform: base project
 
 > **Production-grade MLOps platform to train YOLO models, track with MLflow, and serve with FastAPI & React.**
 
-Annotate → Train YOLO → Track in MLflow → Serve with FastAPI → Test live in React UI.
+Annotate → train YOLO → track in MLflow → serve with FastAPI → use from React.
 
----
-
-## 🔄 End-to-End Workflow Diagram
+## Flow Diagram
 
 ```mermaid
 flowchart TD
@@ -51,93 +49,50 @@ flowchart TD
     P4 --> P5
 ```
 
----
+## Services (docker compose)
 
-## 🚀 Services (Docker Compose)
+| Service | URL |
+|---|---|
+| Frontend (React) | http://localhost:3000 |
+| API docs (FastAPI) | http://localhost:8000/docs |
+| MLflow | http://localhost:5000 |
+| MinIO console | http://localhost:9001 (login from `.env`) |
+| PostgreSQL | localhost:5432 |
 
-| Service | URL | Notes |
-|---|---|---|
-| **Frontend (React)** | [http://localhost:3000](http://localhost:3000) | Live bounding box visualization UI |
-| **API docs (FastAPI)** | [http://localhost:8000/docs](http://localhost:8000/docs) | Swagger UI for inference endpoint |
-| **MLflow** | [http://localhost:5000](http://localhost:5000) | Experiment tracking & metric logs |
-| **MinIO Console** | [http://localhost:9001](http://localhost:9001) | S3-compatible artifact storage |
-| **PostgreSQL** | `localhost:5432` | MLflow metadata store |
+CVAT is run separately from its own official compose setup so upgrades don't touch this project.
 
----
-
-## ⚡ Quick Start
+## Quick start
 
 ```bash
-git init && dvc init                  # Initialize repository & DVC
-make up                               # Start Postgres, MinIO, MLflow, API, Frontend
-make setup                            # Create Python virtual environment for ml/
+git init && dvc init                  # once
+make up                               # postgres, minio, mlflow, api, frontend
+make setup                            # python env for ml/ (install CUDA PyTorch first)
 source .venv/bin/activate
 ```
 
----
+## Workflow
 
-## 🛠️ Step-by-Step Workflow
-
-1. **Ingest Raw Data:**
-   Put images in `data/raw/` then run:
-   ```bash
-   make preprocess
+1. Put images in `data/raw/` then `make preprocess` → `data/processed/`
+2. Annotate `data/processed/` in CVAT and export in **YOLO** format
+3. Copy the export so you have:
    ```
-   *(Resizes and cleans images into `data/processed/`)*
-
-2. **Annotate:**
-   Annotate images in CVAT / Roboflow and export in **YOLO** format:
-   ```text
    data/annotations/images/*.jpg
    data/annotations/labels/*.txt
-   data/annotations/classes.txt      # One class name per line, in class-id order
+   data/annotations/classes.txt      # one class name per line, in class-id order
    ```
+4. `make split` → `data/datasets/v1/` (train/val/test + `data.yaml`)
+5. `make augment` → adds augmented copies to the **train** split only
+6. `dvc add data/datasets/v1` → version the dataset, commit the `.dvc` file
+7. `make train` → logs to MLflow, saves `models/weights/best.pt`
+8. `make eval` → test-split mAP and per-class mAP in `models/eval.json`
+9. `docker compose restart api` → the UI at :3000 now runs your model
 
-3. **Split Dataset:**
-   ```bash
-   make split
-   ```
-   *(Creates train/val/test splits + `data.yaml` inside `data/datasets/v1/`)*
+Optional: `make export` writes ONNX to `models/exported/`
+(set `MODEL_PATH=/models/exported/best.onnx` in `.env` to serve it).
 
-4. **Augment (Optional):**
-   ```bash
-   make augment
-   ```
-   *(Applies Albumentations to the **train** split only)*
+## Notes
 
-5. **Version Dataset:**
-   ```bash
-   dvc add data/datasets/v1
-   ```
-
-6. **Train Model:**
-   ```bash
-   make train
-   ```
-   *(Trains YOLO model, logs metrics/artifacts to MLflow, saves best weights to `models/weights/best.pt`)*
-
-7. **Evaluate:**
-   ```bash
-   make eval
-   ```
-   *(Computes test-split mAP and per-class metrics in `models/eval.json`)*
-
-8. **Deploy to UI:**
-   ```bash
-   docker compose restart api
-   ```
-   *(The React UI at `http://localhost:3000` is now serving your new model)*
-
-9. **Export (Optional):**
-   ```bash
-   make export
-   ```
-   *(Exports to ONNX in `models/exported/`. Set `MODEL_PATH=/models/exported/best.onnx` in `.env` to serve ONNX)*
-
----
-
-## 📌 Notes & Best Practices
-
-- Train from the repo root; paths in configs are relative to it.
+- Train from the repo root; paths in the configs are relative to it.
 - No GPU? Set `device: cpu` in `ml/configs/train.yaml`.
 - Ultralytics YOLO is AGPL-3.0: fine for learning and portfolios, check the license before commercial use.
+- Next steps: SAM 2 auto-annotation script, DVC remote on MinIO, a model registry in MLflow, auth on the API.
