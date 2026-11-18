@@ -97,6 +97,68 @@ flowchart TD
     S5 --> S6
 ```
 
+## Project Structure
+
+End-to-end repository structure with the single-line purpose of each file and folder:
+
+```text
+cv-platform/
+├── .env.example                 # Template for environment variables (DB URLs, paths, secrets)
+├── docker-compose.yml           # Multi-service container orchestration (Postgres, MinIO, MLflow, API, UI)
+├── Makefile                     # Automation shortcuts (make setup, split, train, eval, up)
+├── README.md                    # Project documentation, architecture diagrams, and usage guide
+├── yolo11n.pt                   # Pretrained base YOLO11 nano model checkpoint
+│
+├── backend/                     # FastAPI backend inference service
+│   ├── Dockerfile               # Container build recipe for production API deployment
+│   ├── requirements.txt         # Backend Python dependencies (FastAPI, Uvicorn, SQLAlchemy)
+│   └── app/
+│       ├── db.py                # Database engine setup and SQLAlchemy session manager
+│       ├── main.py              # REST API application and endpoints (/predict, /health, /predictions)
+│       ├── models.py            # Database schema for logging prediction results and audit records
+│       └── services/
+│           └── inference.py     # Lazy model loader and YOLO prediction wrapper service
+│
+├── data/                        # Computer Vision dataset lifecycle management
+│   ├── raw/                     # Original raw uncurated construction site images
+│   ├── processed/               # Standardized and resized images prepared for annotation
+│   ├── annotations/             # CVAT / Roboflow labels (classes.txt, images/, labels/)
+│   └── datasets/
+│       └── v1/                  # Versioned train/val/test splits with YOLO data.yaml
+│
+├── frontend/                    # Modern React user interface
+│   ├── package.json             # Frontend dependencies and Vite scripts
+│   ├── vite.config.js           # Vite dev server configuration with /api backend proxy
+│   └── src/
+│       ├── App.jsx              # Main UI with Image, Video Viewport & Live Webcam detection
+│       ├── main.jsx             # React DOM bootstrap entry point
+│       └── styles.css           # Clean responsive layout and video bounding-box overlay styling
+│
+├── infra/                       # Cloud & local infrastructure configuration
+│   ├── mlflow/Dockerfile        # Container setup for MLflow experiment tracking server
+│   └── postgres/init.sql        # Database initialization script for PostgreSQL metadata
+│
+├── ml/                          # Machine Learning & MLOps training pipelines
+│   ├── requirements.txt         # ML Python dependencies (PyTorch CUDA, Ultralytics, Albumentations)
+│   ├── configs/
+│   │   ├── train.yaml           # Model training hyperparameters (epochs, batch size, learning rate)
+│   │   └── augment.yaml         # Offline data augmentation rules (flips, brightness, crops)
+│   └── src/
+│       ├── download_dataset.py  # Automated script to download and curate PPE safety dataset
+│       ├── preprocess.py        # Image standardization and pre-annotation image cleaner
+│       ├── split_dataset.py     # Splits data into train/val/test and generates data.yaml
+│       ├── augment.py           # Augmentation generator to balance and enrich training split
+│       ├── train.py             # YOLO fine-tuning pipeline integrated with MLflow logging
+│       ├── evaluate.py          # Calculates test mAP50, precision, recall, and per-class metrics
+│       └── export.py            # Converts trained PyTorch model to optimized ONNX runtime format
+│
+├── mlruns/                      # Local MLflow experiment tracking logs and run metrics
+└── models/                      # Model artifact storage and performance metrics
+    ├── eval.json                # Test evaluation results (mAP50: 85.2%, latency, per-class stats)
+    └── weights/
+        └── best.pt              # Best fine-tuned YOLO11 checkpoint used for live inference
+```
+
 ## Services (docker compose)
 
 | Service | URL |
