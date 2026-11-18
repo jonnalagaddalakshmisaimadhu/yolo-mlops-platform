@@ -49,6 +49,54 @@ flowchart TD
     P4 --> P5
 ```
 
+## Project Implementation Flow: Workplace Safety & Helmet Detection
+
+```mermaid
+flowchart TD
+    %% Step 1
+    subgraph S1["Step 1: Data Acquisition"]
+        A["Download Safety Helmet Dataset<br/>(Roboflow / Kaggle Open Data)"] --> B["Store in data/raw/<br/>(~200-500 Images)"]
+    end
+
+    %% Step 2
+    subgraph S2["Step 2: Data Processing & Labels"]
+        B --> C["Preprocess & Resize<br/>python ml/src/preprocess.py"]
+        C --> D["Annotations in YOLO Format<br/>classes.txt, images/, labels/"]
+    end
+
+    %% Step 3
+    subgraph S3["Step 3: Dataset Splitting & Augmentation"]
+        D --> E["Split Dataset (Train: 70%, Val: 20%, Test: 10%)<br/>make split -> data/datasets/v1/"]
+        E --> F["Data Augmentation (Flips, Brightness, Crop)<br/>make augment"]
+    end
+
+    %% Step 4
+    subgraph S4["Step 4: Model Training & Experiment Tracking"]
+        F --> G["YOLOv8 Training<br/>make train (ml/configs/train.yaml)"]
+        G <--> H["MLflow Dashboard (:5000)<br/>Track Loss, Precision, Recall, mAP50"]
+        G --> I["Saved Weights<br/>models/weights/best.pt"]
+    end
+
+    %% Step 5
+    subgraph S5["Step 5: Evaluation & Optimization"]
+        I --> J["Evaluate Model on Test Set<br/>make eval -> models/eval.json"]
+        I --> K["Optional: Export to ONNX<br/>make export"]
+    end
+
+    %% Step 6
+    subgraph S6["Step 6: Deployment & Live Testing"]
+        I --> L["FastAPI Inference Server<br/>http://localhost:8000/predict"]
+        L <--> M["React Web UI<br/>http://localhost:3000"]
+        M --> N["Upload Worker Photos or Test Webcam<br/>Live Bounding Boxes Appear!"]
+    end
+
+    S1 --> S2
+    S2 --> S3
+    S3 --> S4
+    S4 --> S5
+    S5 --> S6
+```
+
 ## Services (docker compose)
 
 | Service | URL |
