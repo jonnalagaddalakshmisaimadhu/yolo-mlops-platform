@@ -6,38 +6,47 @@ const PALETTE = {
 };
 
 export default function App() {
-  const [mode, setMode] = useState("file"); // "file" | "webcam"
+  const [tab, setTab] = useState("video"); // "image" | "video" | "webcam"
   const [file, setFile] = useState(null);
-  const [fileType, setFileType] = useState(null); // "image" | "video"
+  const [videoSrc, setVideoSrc] = useState(null);
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [history, setHistory] = useState([]);
   const [health, setHealth] = useState(null);
-  const [isLiveActive, setIsLiveActive] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
 
-  const canvasRef = useRef(null);
+  const imgCanvasRef = useRef(null);
+  const overlayCanvasRef = useRef(null);
   const videoRef = useRef(null);
   const offscreenCanvasRef = useRef(document.createElement("canvas"));
+  const busyInferRef = useRef(false);
   const isTrackingRef = useRef(false);
-  const latestDetectionsRef = useRef([]);
-  const animFrameIdRef = useRef(null);
 
   const loadHistory = () =>
-    fetch("/api/predictions?limit=8").then((r) => r.json()).then(setHistory).catch(() => {});
+    fetch("/api/predictions?limit=8")
+      .then((r) => r.json())
+      .then(setHistory)
+      .catch(() => {});
 
   useEffect(() => {
-    fetch("/api/health").then((r) => r.json()).then(setHealth).catch(() => setHealth(false));
+    fetch("/api/health")
+      .then((r) => r.json())
+      .then(setHealth)
+      .catch(() => setHealth(false));
     loadHistory();
-    return () => stopWebcam();
+    return () => {
+      stopWebcam();
+      if (videoSrc) URL.revokeObjectURL(videoSrc);
+    };
   }, []);
 
-  const drawBoxesOnCanvas = (ctx, detections, w, h) => {
+  const drawBoxes = (ctx, detections, w, h) => {
     if (!detections || detections.length === 0) return;
-    const lw = Math.max(2, Math.round(w / 300));
-    const fs = Math.max(14, Math.round(w / 45));
+    const lw = Math.max(2, Math.round(w / 350));
+    const fs = Math.max(13, Math.round(w / 50));
     ctx.lineWidth = lw;
-    ctx.font = `700 ${fs}px "Schibsted Grotesk", sans-serif`;
+    ctx.font = `bold ${fs}px "Schibsted Grotesk", system-ui, sans-serif`;
 
     detections.forEach((d) => {
       const color = PALETTE[d.label] || "#1f6feb";
@@ -46,78 +55,50 @@ export default function App() {
       ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
       const text = `${d.label} ${Math.round(d.confidence * 100)}%`;
       const tw = ctx.measureText(text).width + 10;
+      const tagH = fs + 6;
       ctx.fillStyle = color;
-      ctx.fillRect(x1, Math.max(0, y1 - fs - 6), tw, fs + 6);
-      ctx.fillStyle = "#fff";
-      ctx.fillText(text, x1 + 5, Math.max(fs, y1 - 6));
+      ctx.fillRect(x1, Math.max(0, y1 - tagH), tw, tagH);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(text, x1 + 5, Math.max(fs, y1 - 4));
     });
   };
 
-  // Render static image
+  // Render static image on its canvas
   useEffect(() => {
-    if (fileType !== "image" || !file || !canvasRef.current) return;
+    if (tab !== "image" || !file || !imgCanvasRef.current) return;
     const url = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
-      const c = canvasRef.current;
+      const c = imgCanvasRef.current;
+      if (!c) return;
       c.width = img.naturalWidth;
       c.height = img.naturalHeight;
       const ctx = c.getContext("2d");
       ctx.drawImage(img, 0, 0);
-      drawBoxesOnCanvas(ctx, result?.detections, c.width, c.height);
+      drawBoxes(ctx, result?.detections, c.width, c.height);
       URL.revokeObjectURL(url);
     };
     img.src = url;
-  }, [file, fileType, result]);
+  }, [file, tab, result]);
 
-  const pickFile = (f) => {
-    if (!f) return;
-    stopWebcam();
-    stopLiveTracking();
-    setResult(null);
-    setError("");
-    setFile(f);
-    latestDetectionsRef.current = [];
-
-    if (f.type.startsWith("video/")) {
-      setFileType("video");
-      setMode("file");
-      const url = URL.createObjectURL(f);
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-        videoRef.current.src = url;
-        videoRef.current.load();
-      }
-    } else {
-      setFileType("image");
-      setMode("file");
-    }
-  };
-
-  // Video/Webcam Render loop
-  const renderVideoLoop = () => {
+  // Update overlay canvas for video / webcam
+  const updateVideoOverlay = (detections) => {
     const v = videoRef.current;
-    const c = canvasRef.current;
-    if (v && c && !v.paused && !v.ended && v.videoWidth) {
+    const c = overlayCanvasRef.current;
+    if (!v || !c || !v.videoWidth) return;
+    if (c.width !== v.videoWidth || c.height !== v.videoHeight) {
       c.width = v.videoWidth;
       c.height = v.videoHeight;
-      const ctx = c.getContext("2d");
-      ctx.drawImage(v, 0, 0, c.width, c.height);
-      drawBoxesOnCanvas(ctx, latestDetectionsRef.current, c.width, c.height);
     }
-    if (isTrackingRef.current) {
-      animFrameIdRef.current = requestAnimationFrame(renderVideoLoop);
-    }
+    const ctx = c.getContext("2d");
+    ctx.clearRect(0, 0, c.width, c.height);
+    drawBoxes(ctx, detections, c.width, c.height);
   };
 
-  // Detection loop for Video / Webcam frames
-  const runDetectionLoop = () => {
-    if (!isTrackingRef.current) return;
-    const v = videoRef.current;
-    if (!v || v.paused || v.ended || !v.videoWidth) {
-      if (isTrackingRef.current) setTimeout(runDetectionLoop, 100);
-      return;
-    }
+  // Capture current video frame and run model inference
+  const captureAndPredictFrame = (v) => {
+    if (!v || !v.videoWidth || busyInferRef.current) return;
+    busyInferRef.current = true;
 
     const oc = offscreenCanvasRef.current;
     oc.width = v.videoWidth;
@@ -127,21 +108,23 @@ export default function App() {
 
     oc.toBlob(
       async (blob) => {
-        if (!blob || !isTrackingRef.current) return;
+        if (!blob) {
+          busyInferRef.current = false;
+          return;
+        }
         try {
           const body = new FormData();
           body.append("file", blob, "frame.jpg");
           const res = await fetch("/api/predict", { method: "POST", body });
           if (res.ok) {
             const data = await res.json();
-            latestDetectionsRef.current = data.detections;
             setResult(data);
+            updateVideoOverlay(data.detections);
           }
         } catch (e) {
           // ignore transient frame network errors
-        }
-        if (isTrackingRef.current) {
-          setTimeout(runDetectionLoop, 60); // ~15 FPS max inference
+        } finally {
+          busyInferRef.current = false;
         }
       },
       "image/jpeg",
@@ -149,36 +132,70 @@ export default function App() {
     );
   };
 
+  // Video playback detection loop (~12 FPS)
+  const runDetectionLoop = () => {
+    if (!isTrackingRef.current) return;
+    const v = videoRef.current;
+    if (v && !v.paused && !v.ended && v.videoWidth) {
+      captureAndPredictFrame(v);
+    }
+    if (isTrackingRef.current) {
+      setTimeout(runDetectionLoop, 80);
+    }
+  };
+
   const startLiveTracking = () => {
     isTrackingRef.current = true;
-    setIsLiveActive(true);
-    animFrameIdRef.current = requestAnimationFrame(renderVideoLoop);
+    setIsPlaying(true);
     runDetectionLoop();
   };
 
   const stopLiveTracking = () => {
     isTrackingRef.current = false;
-    setIsLiveActive(false);
-    if (animFrameIdRef.current) {
-      cancelAnimationFrame(animFrameIdRef.current);
+    setIsPlaying(false);
+  };
+
+  // File selection
+  const handleFile = (f) => {
+    if (!f) return;
+    setError("");
+    setResult(null);
+
+    if (f.type.startsWith("video/")) {
+      setTab("video");
+      if (videoSrc) URL.revokeObjectURL(videoSrc);
+      const url = URL.createObjectURL(f);
+      setVideoSrc(url);
+      setFile(f);
+      stopWebcam();
+    } else {
+      setTab("image");
+      setFile(f);
+      if (videoSrc) {
+        URL.revokeObjectURL(videoSrc);
+        setVideoSrc(null);
+      }
+      stopWebcam();
     }
   };
 
+  // Webcam handling
   const startWebcam = async () => {
     stopWebcam();
+    if (videoSrc) {
+      URL.revokeObjectURL(videoSrc);
+      setVideoSrc(null);
+    }
     setFile(null);
-    setFileType("video");
-    setMode("webcam");
     setResult(null);
     setError("");
-    latestDetectionsRef.current = [];
+    setTab("webcam");
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 1280 }, height: { ideal: 720 } },
       });
       if (videoRef.current) {
-        videoRef.current.src = "";
         videoRef.current.srcObject = stream;
         videoRef.current.onloadedmetadata = () => {
           videoRef.current.play();
@@ -187,7 +204,7 @@ export default function App() {
       }
     } catch (err) {
       setError("Cannot access webcam: " + err.message);
-      setMode("file");
+      setTab("image");
     }
   };
 
@@ -240,25 +257,25 @@ export default function App() {
       {/* Mode Navigation */}
       <nav className="mode-nav">
         <button
-          className={`tab-btn ${mode === "file" && (!file || fileType === "image") ? "active" : ""}`}
+          className={`tab-btn ${tab === "image" ? "active" : ""}`}
           onClick={() => {
             stopWebcam();
-            setMode("file");
+            setTab("image");
           }}
         >
           📷 Image Mode
         </button>
         <button
-          className={`tab-btn ${mode === "file" && fileType === "video" ? "active" : ""}`}
+          className={`tab-btn ${tab === "video" ? "active" : ""}`}
           onClick={() => {
             stopWebcam();
-            setMode("file");
+            setTab("video");
           }}
         >
           🎥 Video Upload
         </button>
         <button
-          className={`tab-btn ${mode === "webcam" ? "active" : ""}`}
+          className={`tab-btn ${tab === "webcam" ? "active" : ""}`}
           onClick={startWebcam}
         >
           🔴 Live Webcam
@@ -266,87 +283,129 @@ export default function App() {
       </nav>
 
       <section className="bench">
+        {/* Main Display Plate */}
         <div
           className="plate"
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => {
             e.preventDefault();
-            pickFile(e.dataTransfer.files[0]);
+            handleFile(e.dataTransfer.files[0]);
           }}
         >
-          {mode === "webcam" || fileType === "video" ? (
-            <div className="media-container">
+          {tab === "video" && videoSrc ? (
+            <div className="video-viewport">
               <video
                 ref={videoRef}
-                controls={mode !== "webcam"}
+                src={videoSrc}
+                controls
                 playsInline
                 muted
+                className="active-video"
+                onLoadedData={(e) => {
+                  const v = e.target;
+                  if (overlayCanvasRef.current) {
+                    overlayCanvasRef.current.width = v.videoWidth;
+                    overlayCanvasRef.current.height = v.videoHeight;
+                  }
+                  captureAndPredictFrame(v);
+                }}
                 onPlay={() => {
-                  if (!isLiveActive) startLiveTracking();
+                  startLiveTracking();
                 }}
                 onPause={() => {
-                  if (mode !== "webcam") stopLiveTracking();
+                  stopLiveTracking();
+                }}
+                onSeeked={(e) => {
+                  captureAndPredictFrame(e.target);
                 }}
                 onEnded={stopLiveTracking}
-                className="hidden-video"
               />
-              <canvas ref={canvasRef} aria-label="Video with real-time detection boxes" />
+              <canvas ref={overlayCanvasRef} className="overlay-canvas" />
             </div>
-          ) : file ? (
-            <canvas ref={canvasRef} aria-label="Image with detected objects" />
+          ) : tab === "webcam" ? (
+            <div className="video-viewport">
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="active-video"
+                onLoadedMetadata={(e) => {
+                  const v = e.target;
+                  if (overlayCanvasRef.current) {
+                    overlayCanvasRef.current.width = v.videoWidth;
+                    overlayCanvasRef.current.height = v.videoHeight;
+                  }
+                  startLiveTracking();
+                }}
+              />
+              <canvas ref={overlayCanvasRef} className="overlay-canvas" />
+            </div>
+          ) : tab === "image" && file ? (
+            <canvas ref={imgCanvasRef} className="static-canvas" aria-label="Image with detected objects" />
           ) : (
             <label className="drop">
               <input
                 type="file"
-                accept="image/*,video/*"
-                onChange={(e) => pickFile(e.target.files[0])}
+                accept={tab === "video" ? "video/*" : "image/*"}
+                onChange={(e) => handleFile(e.target.files[0])}
               />
-              <div>
-                <p style={{ fontSize: "1.2rem", fontWeight: "bold", margin: "0 0 8px" }}>
-                  Drop an Image or Video here
-                </p>
-                <p style={{ margin: 0 }}>Supports JPG, PNG, MP4, WebM, MOV</p>
+              <div className="drop-icon">
+                {tab === "video" ? "🎥" : "📷"}
               </div>
+              <p style={{ fontSize: "1.2rem", fontWeight: "bold", margin: "0 0 6px" }}>
+                {tab === "video"
+                  ? "Drop a Video here or Click to Browse"
+                  : "Drop an Image here or Click to Browse"}
+              </p>
+              <p style={{ margin: 0 }}>
+                {tab === "video"
+                  ? "Supports MP4, WebM, MOV"
+                  : "Supports JPG, PNG, WebP"}
+              </p>
             </label>
           )}
         </div>
 
+        {/* Sidebar Controls & History */}
         <aside>
           <div className="actions">
             <label className="btn ghost">
               Choose File
               <input
                 type="file"
-                accept="image/*,video/*"
-                onChange={(e) => pickFile(e.target.files[0])}
+                accept={tab === "video" ? "video/*" : "image/*"}
+                onChange={(e) => handleFile(e.target.files[0])}
                 hidden
               />
             </label>
 
-            {fileType === "image" && (
+            {tab === "image" && (
               <button className="btn" disabled={!file || busy} onClick={detectStaticImage}>
                 {busy ? "Detecting…" : "Detect Objects"}
               </button>
             )}
 
-            {fileType === "video" && mode !== "webcam" && (
+            {tab === "video" && videoSrc && (
               <button
-                className={`btn ${isLiveActive ? "btn-stop" : ""}`}
+                className={`btn ${isPlaying ? "btn-stop" : ""}`}
                 onClick={() => {
-                  if (isLiveActive) {
-                    stopLiveTracking();
-                    videoRef.current?.pause();
-                  } else {
-                    videoRef.current?.play();
+                  const v = videoRef.current;
+                  if (!v) return;
+                  if (v.paused) {
+                    v.play();
                     startLiveTracking();
+                  } else {
+                    v.pause();
+                    stopLiveTracking();
                   }
                 }}
               >
-                {isLiveActive ? "Pause Tracking" : "Start Tracking"}
+                {isPlaying ? "Pause Tracking" : "Start Tracking"}
               </button>
             )}
 
-            {mode === "webcam" && (
+            {tab === "webcam" && (
               <button className="btn btn-stop" onClick={stopWebcam}>
                 Stop Camera
               </button>
@@ -364,7 +423,7 @@ export default function App() {
               </h2>
               <ul className="dets">
                 {result.detections.length === 0 && (
-                  <li className="hint">No objects detected above threshold.</li>
+                  <li className="hint">No PPE/helmets detected in frame.</li>
                 )}
                 {result.detections.map((d, i) => (
                   <li key={i} className={`tag-item ${d.label}`}>
@@ -379,7 +438,7 @@ export default function App() {
             </div>
           ) : (
             <p className="hint">
-              {fileType === "video" || mode === "webcam"
+              {tab === "video" || tab === "webcam"
                 ? "Play video or turn on webcam to see real-time bounding boxes."
                 : "Results appear here after detection."}
             </p>

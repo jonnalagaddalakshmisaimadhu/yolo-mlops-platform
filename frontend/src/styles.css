@@ -5,59 +5,108 @@
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--ink);
   font-family: "Schibsted Grotesk", system-ui, sans-serif; line-height: 1.5; }
-main { max-width: 1120px; margin: 0 auto; padding: 32px 20px 56px; }
+main { max-width: 1140px; margin: 0 auto; padding: 32px 20px 56px; }
 header { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
 h1 { font-size: 2rem; margin: 0; letter-spacing: -0.02em; }
 .subtitle { margin: 4px 0 0; color: var(--muted); font-size: 0.95rem; }
-h2 { font-size: 1rem; margin: 28px 0 8px; }
+h2 { font-size: 1rem; margin: 24px 0 8px; }
 h2 small { color: var(--muted); font-weight: 400; margin-left: 6px; }
 .status { margin: 0; color: var(--muted); font-size: 0.9rem; }
-.status.ok { color: var(--ok); }
+.status.ok { color: var(--ok); font-weight: 600; }
 
 .mode-nav {
   display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;
 }
 .tab-btn {
-  padding: 8px 16px; font: inherit; font-size: 0.9rem; font-weight: 600;
-  border: 1px solid var(--line); background: var(--panel); border-radius: 4px;
+  padding: 8px 18px; font: inherit; font-size: 0.9rem; font-weight: 600;
+  border: 1px solid var(--line); background: var(--panel); border-radius: 6px;
   cursor: pointer; color: var(--muted); transition: all 0.15s ease;
 }
 .tab-btn:hover { border-color: var(--ink); color: var(--ink); }
 .tab-btn.active { background: var(--ink); color: #fff; border-color: var(--ink); }
 
-.bench { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; }
-.plate { background: var(--panel); border: 1px solid var(--line); border-radius: 4px;
-  min-height: 440px; display: grid; place-items: center; padding: 12px; position: relative; }
-.plate canvas { max-width: 100%; max-height: 70vh; height: auto; display: block; border-radius: 2px; }
-
-.media-container {
-  width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
-}
-.hidden-video {
-  width: 100%; max-height: 50px; margin-top: 10px;
+.bench { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: start; }
+.plate {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  min-height: 480px; display: flex; align-items: center; justify-content: center;
+  padding: 16px; position: relative; overflow: hidden;
 }
 
-.drop { display: grid; place-items: center; width: 100%; height: 100%; min-height: 396px;
-  border: 2px dashed var(--line); border-radius: 2px; color: var(--muted); cursor: pointer; text-align: center; padding: 16px; }
+/* Static canvas for single images */
+canvas.static-canvas {
+  max-width: 100%;
+  max-height: 70vh;
+  height: auto;
+  display: block;
+  border-radius: 4px;
+}
+
+/* Video viewport & overlay */
+.video-viewport {
+  position: relative;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  max-width: 100%;
+  max-height: 70vh;
+  background: #05080c;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.active-video {
+  display: block;
+  max-width: 100%;
+  max-height: 70vh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  background: #000;
+}
+
+.overlay-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100% !important;
+  height: 100% !important;
+  pointer-events: none;
+}
+
+/* Dropzone */
+.drop {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  width: 100%; min-height: 440px;
+  border: 2px dashed var(--line); border-radius: 6px; color: var(--muted);
+  cursor: pointer; text-align: center; padding: 24px; transition: border-color 0.2s;
+}
 .drop:hover, .drop:focus-within { border-color: var(--signal); color: var(--ink); }
 .drop input { position: absolute; opacity: 0; pointer-events: none; }
+.drop-icon { font-size: 2.5rem; margin-bottom: 8px; }
 
-.actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.btn { flex: 1; min-width: 120px; text-align: center; font: inherit; font-weight: 700; cursor: pointer;
-  background: var(--ink); color: #fff; border: 1px solid var(--ink); border-radius: 3px; padding: 10px 12px; }
-.btn.ghost { background: transparent; color: var(--ink); }
+/* Action buttons */
+.actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.btn {
+  flex: 1; min-width: 120px; text-align: center; font: inherit; font-weight: 700; cursor: pointer;
+  background: var(--ink); color: #fff; border: 1px solid var(--ink); border-radius: 4px;
+  padding: 10px 14px; transition: background-color 0.15s;
+}
+.btn.ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+.btn.ghost:hover { border-color: var(--ink); }
 .btn:hover:not(:disabled) { background: var(--signal); border-color: var(--signal); color: #fff; }
 .btn-stop { background: var(--signal); border-color: var(--signal); }
 .btn-stop:hover { background: #d9381e; border-color: #d9381e; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn:focus-visible, .drop:focus-within { outline: 3px solid var(--signal); outline-offset: 2px; }
 
+/* Predictions list */
 .dets { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
-.dets li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
-.dets span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 6px; }
-.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-.history { color: var(--muted); }
+.dets li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 0.95rem; }
+.dets span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 8px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.history { color: var(--muted); font-size: 0.9rem; }
 .hint { color: var(--muted); font-size: 0.9rem; }
-.error { color: #b3261e; margin: 12px 0 0; }
+.error { color: #b3261e; margin: 12px 0 0; font-size: 0.9rem; }
 
-@media (max-width: 800px) { .bench { grid-template-columns: 1fr; } }
+@media (max-width: 840px) { .bench { grid-template-columns: 1fr; } }
