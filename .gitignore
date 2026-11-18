@@ -4,6 +4,11 @@ __pycache__/
 .venv/
 node_modules/
 dist/
+dev.db
+*.db
+mlruns/
+runs/
+*.pt
 # DVC tracks these (run `dvc add data/datasets/v1 models/weights`)
 /data/raw/*
 /data/processed/*
