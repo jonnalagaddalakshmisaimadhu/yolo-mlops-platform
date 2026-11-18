@@ -1,0 +1,7 @@
+# Install PyTorch with CUDA first: https://pytorch.org/get-started/locally/
+ultralytics>=8.3
+albumentations>=1.4
+opencv-python-headless
+mlflow<3
+pyyaml
+numpy

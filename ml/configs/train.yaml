@@ -1,0 +1,9 @@
+model: yolo11n.pt        # swap for yolo11s.pt / a newer Ultralytics model as needed
+data: data/datasets/v1/data.yaml
+epochs: 50
+imgsz: 640
+batch: 16
+device: 0                # use "cpu" if no GPU
+project: models/runs
+name: exp
+experiment: cv-platform  # MLflow experiment name

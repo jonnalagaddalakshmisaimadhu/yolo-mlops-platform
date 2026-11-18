@@ -1,0 +1,5 @@
+hflip: 0.5
+brightness_contrast: 0.5
+hsv: 0.3
+noise: 0.2
+affine: 0.5

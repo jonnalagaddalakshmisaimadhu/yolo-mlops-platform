@@ -1,0 +1,16 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+node_modules/
+dist/
+# DVC tracks these (run `dvc add data/datasets/v1 models/weights`)
+/data/raw/*
+/data/processed/*
+/data/annotations/images/*
+/data/annotations/labels/*
+/data/datasets/*
+/models/weights/*
+/models/exported/*
+/models/runs/
+!.gitkeep
